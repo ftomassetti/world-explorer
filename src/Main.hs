@@ -10,12 +10,12 @@ import Text.ProtocolBuffers.WireMessage (messageGet)
 import Graphics.UI.GLUT
 import qualified Data.Map.Strict as M
 import Data.Foldable (toList)
-
-myPoints :: [(GLfloat,GLfloat,GLfloat)]
---myPoints = [ (sin (2*pi*k/12), cos (2*pi*k/12), 0) | k <- [1..12] ]
-myPoints = [ (0.5, 0.5, 0.0)]
+import Data.Maybe
 
 type MColor = (GLfloat,GLfloat,GLfloat)
+type GLPoint = (GLfloat,GLfloat,GLfloat)
+type ColoredPoint = (MColor, GLPoint)
+type ColoredQuad = (ColoredPoint, ColoredPoint, ColoredPoint, ColoredPoint)
 
 toGlCoords :: Int -> Int -> IPoint -> (GLfloat,GLfloat,GLfloat)
 toGlCoords width height (x,y) = let xf :: Float = fromIntegral x
@@ -25,6 +25,12 @@ toGlCoords width height (x,y) = let xf :: Float = fromIntegral x
                                     glX :: GLfloat = realToFrac $ ((xf / wf) * 2.0) - 1.0
                                     glY :: GLfloat = realToFrac $ ((yf / hf) * 2.0) - 1.0
                                 in (glX, glY, 0.5)
+
+landColor :: MColor
+landColor = (realToFrac 0.0, realToFrac 1.0, realToFrac 0.0)
+
+oceanColor :: MColor
+oceanColor = (realToFrac 0.0, realToFrac 0.0, realToFrac 1.0)
 
 toColoredPoints :: Int -> Int -> [IPoint] -> MColor -> [(MColor,(GLfloat,GLfloat,GLfloat))]
 toColoredPoints width height coords color = let glCoords = map (toGlCoords width height) coords
@@ -36,9 +42,23 @@ findPoints elevMap width height = let values :: [(IPoint,Float)] = M.toList elev
                                       oceanValues :: [(IPoint,Float)] = filter (\(_,e) -> e<=0.5) values
                                       landCoords  :: [IPoint] = map fst landValues
                                       oceanCoords  :: [IPoint] = map fst oceanValues
-                                      landColor :: MColor = (realToFrac 1.0, realToFrac 0.0, realToFrac 0.0)
-                                      oceanColor :: MColor = (realToFrac 0.0, realToFrac 0.0, realToFrac 1.0)
                                   in toColoredPoints width height landCoords landColor ++ toColoredPoints width height oceanCoords oceanColor
+
+toColoredPoint :: ElevationMap -> Int -> Int -> IPoint -> ColoredPoint
+toColoredPoint elevationMap width height p@(x,y) = let elev = case M.lookup (x,y) elevationMap of
+                                                              Just e -> e
+                                                              Nothing -> error $ "Not found point "++(show x)++", "++(show y)++" in elevation map"
+                                                       color = if elev<0.5 then oceanColor else landColor
+                                                       glCoords = toGlCoords width height p
+                                                   in (color,glCoords)
+
+findQuads :: ElevationMap -> Int -> Int -> [ColoredQuad]
+findQuads elevMap width height = let quadCoords :: [((Int,Int),(Int,Int),(Int,Int),(Int,Int))] = [((x,y),(x+1,y),(x+1,y+1),(x,y+1)) | x <- [0..(width-2)], y <- [0..(height-2)]]
+
+                                 in map (\(a,b,c,d) -> (toColoredPoint' a, toColoredPoint' b, toColoredPoint' c, toColoredPoint' d)) quadCoords
+                                 where toColoredPoint' = toColoredPoint elevMap width height
+
+-- findQuads
 
 type IPoint = (Int,Int)
 type ElevationMap = M.Map IPoint Float
@@ -86,12 +106,22 @@ drawColoredPoint :: (MColor,(GLfloat,GLfloat,GLfloat)) -> IO ()
 drawColoredPoint ((r,g,b), (x,y,z)) = do color3f r g b
                                          vertex $ Vertex3 x y z
 
+drawColoredQuad :: ColoredQuad -> IO ()
+drawColoredQuad (a,b,c,d) = do drawColoredPoint a
+                               drawColoredPoint b
+                               drawColoredPoint c
+                               drawColoredPoint d
+
+
 display :: ElevationMap -> Int -> Int -> DisplayCallback
 display elevMap width height = do
   clear [ ColorBuffer ]
   let points = findPoints elevMap width height
-  renderPrimitive Points $
-       mapM_ drawColoredPoint points
+  let quads  = findQuads  elevMap width height
+  --renderPrimitive Points $
+  --     mapM_ drawColoredPoint points
+  renderPrimitive Quads $
+       mapM_ drawColoredQuad quads
   flush
 
 main = do
