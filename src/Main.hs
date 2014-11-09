@@ -124,6 +124,7 @@ display elevMap width height angle pos = do
   loadIdentity
   (x',y') <- get pos
   -- translate $ Vector3 x' 0 y'
+  loadIdentity
   preservingMatrix $ do
       a <- get angle
       rotate a $ Vector3 0 1 1

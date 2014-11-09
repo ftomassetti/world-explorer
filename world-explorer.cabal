@@ -18,7 +18,8 @@ cabal-version:       >=1.10
 executable world-explorer
   main-is:             Main.hs
   -- other-modules:       
-  -- other-extensions:    
+  -- other-extensions:
+  --ghc-options:         -prof -auto-all
   build-depends:       base >=4.6 && <4.7,
                        hprotoc==2.0.14,
                        bytestring,
