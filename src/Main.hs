@@ -15,6 +15,8 @@ myPoints :: [(GLfloat,GLfloat,GLfloat)]
 --myPoints = [ (sin (2*pi*k/12), cos (2*pi*k/12), 0) | k <- [1..12] ]
 myPoints = [ (0.5, 0.5, 0.0)]
 
+type MColor = (GLfloat,GLfloat,GLfloat)
+
 toGlCoords :: Int -> Int -> IPoint -> (GLfloat,GLfloat,GLfloat)
 toGlCoords width height (x,y) = let xf :: Float = fromIntegral x
                                     yf :: Float = fromIntegral y
@@ -24,11 +26,19 @@ toGlCoords width height (x,y) = let xf :: Float = fromIntegral x
                                     glY :: GLfloat = realToFrac $ ((yf / hf) * 2.0) - 1.0
                                 in (glX, glY, 0.5)
 
-findPoints :: ElevationMap -> Int -> Int -> [(GLfloat,GLfloat,GLfloat)]
+toColoredPoints :: Int -> Int -> [IPoint] -> MColor -> [(MColor,(GLfloat,GLfloat,GLfloat))]
+toColoredPoints width height coords color = let glCoords = map (toGlCoords width height) coords
+                                            in zip (repeat color) glCoords
+
+findPoints :: ElevationMap -> Int -> Int -> [(MColor,(GLfloat,GLfloat,GLfloat))]
 findPoints elevMap width height = let values :: [(IPoint,Float)] = M.toList elevMap
-                                      landValues = filter (\(_,e) -> e>0.5) values
-                                      coords :: [(IPoint)] = map fst landValues
-                                  in map (toGlCoords width height) coords
+                                      landValues  :: [(IPoint,Float)] = filter (\(_,e) -> e>0.5) values
+                                      oceanValues :: [(IPoint,Float)] = filter (\(_,e) -> e<=0.5) values
+                                      landCoords  :: [IPoint] = map fst landValues
+                                      oceanCoords  :: [IPoint] = map fst oceanValues
+                                      landColor :: MColor = (realToFrac 1.0, realToFrac 0.0, realToFrac 0.0)
+                                      oceanColor :: MColor = (realToFrac 0.0, realToFrac 0.0, realToFrac 1.0)
+                                  in toColoredPoints width height landCoords landColor ++ toColoredPoints width height oceanCoords oceanColor
 
 type IPoint = (Int,Int)
 type ElevationMap = M.Map IPoint Float
@@ -70,12 +80,18 @@ loadWorld filename = do
     putStrLn $ " width: " ++ show (worldWidth world)
     return world
 
+color3f r g b = color $ Color3 r g (b :: GLfloat)
+
+drawColoredPoint :: (MColor,(GLfloat,GLfloat,GLfloat)) -> IO ()
+drawColoredPoint ((r,g,b), (x,y,z)) = do color3f r g b
+                                         vertex $ Vertex3 x y z
+
 display :: ElevationMap -> Int -> Int -> DisplayCallback
 display elevMap width height = do
   clear [ ColorBuffer ]
   let points = findPoints elevMap width height
   renderPrimitive Points $
-       mapM_ (\(x, y, z) -> vertex $ Vertex3 x y z) points
+       mapM_ drawColoredPoint points
   flush
 
 main = do
