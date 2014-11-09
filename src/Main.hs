@@ -25,7 +25,7 @@ toGlCoords width height ((x,y),elev) = let xf :: Float = fromIntegral x
                                            hf :: Float = fromIntegral height
                                            glX :: GLfloat = realToFrac $ ((xf / wf) * 2.0) - 1.0
                                            glY :: GLfloat = realToFrac $ ((yf / hf) * 2.0) - 1.0
-                                       in (glX, glY, realToFrac $ elev - 1.0)
+                                       in (glX, glY, realToFrac $ (elev - 0.5) / 150)
 
 landColor :: MColor
 landColor = (realToFrac 0.0, realToFrac 1.0, realToFrac 0.0)
@@ -49,7 +49,9 @@ toColoredPoint :: ElevationMap -> Int -> Int -> IPoint -> ColoredPoint
 toColoredPoint elevationMap width height p@(x,y) = let elev = case M.lookup (x,y) elevationMap of
                                                               Just e -> e
                                                               Nothing -> error $ "Not found point "++(show x)++", "++(show y)++" in elevation map"
-                                                       color = if elev<0.5 then oceanColor else landColor
+                                                       color = if elev<0.5
+                                                               then (realToFrac 0.0, realToFrac 0.0, realToFrac $ elev*2.0)
+                                                               else (realToFrac 0.0, realToFrac $ elev/5.0, realToFrac 0.0)
                                                        glCoords = toGlCoords width height (p,elev)
                                                    in (color,glCoords)
 
@@ -121,11 +123,11 @@ display elevMap width height angle pos = do
   clear [ ColorBuffer ]
   loadIdentity
   (x',y') <- get pos
-  translate $ Vector3 x' y' 0
+  -- translate $ Vector3 x' 0 y'
   preservingMatrix $ do
       a <- get angle
-      rotate a $ Vector3 0 1 0
-      rotate a $ Vector3 0.1 1 0 -- changed y-component a bit to show off cube corners
+      rotate a $ Vector3 0 1 1
+      -- rotate a $ Vector3 0 0.1 1 -- changed y-component a bit to show off cube corners
       scale 0.7 0.7 (0.7::GLfloat)
       preservingMatrix $ do
         renderPrimitive Quads $
@@ -163,7 +165,7 @@ main = do
     (_progName, _args) <- getArgsAndInitialize
     _window <- createWindow "World Explorer"
     angle <- newIORef 0.3
-    delta <- newIORef 0.1
+    delta <- newIORef 2.0
     pos <- newIORef (0, 0)
     keyboardMouseCallback $= Just (keyboardMouse delta pos)
     idleCallback $= Just (idle angle delta)
